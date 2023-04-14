@@ -12,7 +12,7 @@ pub fn build(b: *std.build.Builder) void {
     });
     lib.want_lto = want_lto;
     lib.addIncludePath("include/ggml");
-    lib.installHeadersDirectory("include/ggml", "ggml");
+    lib.installHeader("include/ggml/ggml.h", "ggml.h");
     lib.addCSourceFile("src/ggml.c", &.{});
     lib.install();
     lib.linkLibC();
