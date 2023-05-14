@@ -4,6 +4,7 @@ pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const want_lto = b.option(bool, "lto", "Want -fLTO");
+    const use_openblas = b.option(bool, "use-openblas", "Compile with support for OpenBLAS (default: false)") orelse false;
 
     const lib = b.addStaticLibrary(.{
         .name = "ggml",
@@ -16,6 +17,10 @@ pub fn build(b: *std.build.Builder) void {
     lib.installHeadersDirectory("include/ggml", "ggml");
     lib.addCSourceFile("src/ggml.c", &.{});
     lib.linkLibC();
+    if (use_openblas) {
+        lib.defineCMacro("GGML_USE_OPENBLAS", "1");
+        lib.linkSystemLibrary("openblas");
+    }
     b.installArtifact(lib);
 
     // utils for examples
