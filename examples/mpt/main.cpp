@@ -137,10 +137,10 @@ bool mpt_model_load(const std::string & fname, mpt_model & model,
     {
         const auto & hparams = model.hparams;
 
-        const int n_embd = hparams.d_model;
-        const int n_layer = hparams.n_layers;
-        const int n_ctx = hparams.max_seq_len;
-        const int n_vocab = hparams.n_vocab;
+        const uint64_t n_embd = hparams.d_model;
+        const uint64_t n_layer = hparams.n_layers;
+        const uint64_t n_ctx = hparams.max_seq_len;
+        const uint64_t n_vocab = hparams.n_vocab;
 
         ctx_size += n_embd * n_vocab * ggml_type_sizef(wtype); // wte_weifgr
 
@@ -372,40 +372,22 @@ bool mpt_model_load(const std::string & fname, mpt_model & model,
 bool mpt_eval(const mpt_model & model, const int n_threads, const int n_past,
               const std::vector<gpt_vocab::id> & embd_inp,
               std::vector<float> & embd_w, size_t & mem_per_token) {
-    const int N = embd_inp.size();
+    // printf("%s(%p, %d, %d, %p, %p, %p)\n", __func__, &model, n_threads, n_past, &embd_inp, &embd_w, &mem_per_token);
+    const uint64_t N = embd_inp.size();
 
     const auto & hparams = model.hparams;
 
-    const int n_embd = hparams.d_model;
-    const int n_layer = hparams.n_layers;
-    const int n_ctx = hparams.max_seq_len;
-    const int n_head = hparams.n_heads;
-    const int n_vocab = hparams.n_vocab;
+    const uint64_t n_embd = hparams.d_model;
+    const uint64_t n_layer = hparams.n_layers;
+    const uint64_t n_ctx = hparams.max_seq_len;
+    const uint64_t n_head = hparams.n_heads;
+    const uint64_t n_vocab = hparams.n_vocab;
 
     static size_t buf_size = 256u * 1024 * 1024;
-    static void * buf = malloc(buf_size);
-
-    if (mem_per_token > 0 && mem_per_token * N > buf_size) {
-        const size_t buf_size_new =
-            1.1 *
-            (mem_per_token * N); // add 10% to account for ggml object overhead
-        // printf("\n%s: reallocating buffer from %zu to %zu bytes\n", __func__,
-        // buf_size, buf_size_new);
-
-        // reallocate
-        buf_size = buf_size_new;
-        buf = realloc(buf, buf_size);
-        if (buf == nullptr) {
-            fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__,
-                    buf_size);
-            return false;
-        }
-    }
 
     struct ggml_init_params params = {
-        .mem_size = buf_size,
-        .mem_buffer = buf,
-        .no_alloc = false,
+        .mem_size = (mem_per_token > 0 && (mem_per_token * N) > buf_size) ? ((mem_per_token * N) + ((mem_per_token * N) / 10)) : buf_size,
+        .mem_buffer = NULL,
     };
 
     struct ggml_context * ctx0 = ggml_init(params);
@@ -583,14 +565,6 @@ bool mpt_eval(const mpt_model & model, const int n_threads, const int n_past,
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute(ctx0, &gf);
 
-    // std::cout << "Qcur" << std::endl;
-    // print_tensor(Qcur);
-
-    // if (n_past%100 == 0) {
-    // ggml_graph_print(&gf);
-    // ggml_graph_dump_dot(&gf, NULL, "mpt-model.dot");
-    // }
-
     // return result for just the last token
     embd_w.resize(n_vocab);
     memcpy(embd_w.data(), (float *)ggml_get_data(inpL) + (n_vocab * (N - 1)),
@@ -599,7 +573,6 @@ bool mpt_eval(const mpt_model & model, const int n_threads, const int n_past,
     if (mem_per_token == 0) {
         mem_per_token = ggml_used_mem(ctx0) / N;
     }
-    // printf("used_mem = %zu\n", ggml_used_mem(ctx0));
 
     ggml_free(ctx0);
 
@@ -679,7 +652,9 @@ int main(int argc, char ** argv) {
     size_t mem_per_token = 0;
     mpt_eval(model, params.n_threads, 0, {0, 1, 2, 3}, logits, mem_per_token);
 
-    for (int i = embd.size(); i < embd_inp.size() + params.n_predict; i++) {
+    // printf("%s: emdb.size() = %ld\n", __func__, embd.size());
+    int i = 0;
+    while (i < embd_inp.size() + params.n_predict) {
         // predict
         if (embd.size() > 0) {
             const int64_t t_start_us = ggml_time_us();
@@ -720,13 +695,13 @@ int main(int argc, char ** argv) {
             embd.push_back(id);
         } else {
             // if here, it means we are still processing the input prompt
-            for (int k = i; k < embd_inp.size(); k++) {
-                embd.push_back(embd_inp[k]);
-                if (embd.size() > params.n_batch) {
+            while (i < embd_inp.size()) {
+                embd.push_back(embd_inp[i]);
+                i += 1;
+                if (embd.size() >= params.n_batch) {
                     break;
                 }
             }
-            i += embd.size() - 1;
         }
 
         // display text
