@@ -1,0 +1,10 @@
+.{
+	.name = "ggml",
+	.version = "0.1.0",
+	.dependencies = .{
+		.clblast = .{
+			.url = "https://github.com/leroycep/CLBlast/archive/723c13748220f2ccb06c02a9b74f3c4965e1c0a9.tar.gz",
+			.hash = "122025940ca8e116e2b97da8c1f1246f665f9cebb824eddf80ef812c62619c90dade",
+		},
+	},
+}
