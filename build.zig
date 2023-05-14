@@ -1,10 +1,17 @@
 const std = @import("std");
 
+const ComputeFramework = enum {
+    accelerate,
+    openblas,
+    cublas,
+    clblast,
+};
+
 pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const want_lto = b.option(bool, "lto", "Want -fLTO");
-    const use_openblas = b.option(bool, "use-openblas", "Compile with support for OpenBLAS (default: false)") orelse false;
+    const compute_framework = b.option(ComputeFramework, "compute-framework", "Specify a library to perform computations (default: none)");
 
     const lib = b.addStaticLibrary(.{
         .name = "ggml",
@@ -17,9 +24,29 @@ pub fn build(b: *std.build.Builder) void {
     lib.installHeadersDirectory("include/ggml", "ggml");
     lib.addCSourceFile("src/ggml.c", &.{});
     lib.linkLibC();
-    if (use_openblas) {
-        lib.defineCMacro("GGML_USE_OPENBLAS", "1");
-        lib.linkSystemLibrary("openblas");
+    if (compute_framework) |framework| {
+        switch (framework) {
+            .accelerate => {
+                lib.defineCMacro("GGML_USE_ACCELERATE", "1");
+            },
+            .openblas => {
+                lib.defineCMacro("GGML_USE_OPENBLAS", "1");
+                lib.linkSystemLibrary("openblas");
+            },
+            .cublas => {
+                lib.defineCMacro("GGML_USE_CUBLAS", "1");
+            },
+            .clblast => {
+                const clblast = b.dependency("clblast", .{
+                    .target = target,
+                    .optimize = optimize,
+                });
+
+                lib.addCSourceFile("src/ggml-opencl.c", &.{});
+                lib.defineCMacro("GGML_USE_CLBLAST", "1");
+                lib.linkLibrary(clblast.artifact("clblast"));
+            },
+        }
     }
     b.installArtifact(lib);
 
