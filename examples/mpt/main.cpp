@@ -384,9 +384,10 @@ bool mpt_eval(const mpt_model & model, const int n_threads, const int n_past,
     const uint64_t n_vocab = hparams.n_vocab;
 
     static size_t buf_size = 256u * 1024 * 1024;
+    const size_t estimated_size = 3 * mem_per_token * N;
 
     struct ggml_init_params params = {
-        .mem_size = (mem_per_token > 0 && (mem_per_token * N) > buf_size) ? ((mem_per_token * N) + ((mem_per_token * N) / 10)) : buf_size,
+        .mem_size = (mem_per_token > 0 && estimated_size > buf_size) ? estimated_size : buf_size,
         .mem_buffer = NULL,
     };
 
